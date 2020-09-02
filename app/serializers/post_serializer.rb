@@ -111,7 +111,7 @@ class PostSerializer < BasicPostSerializer
 
   def include_category_id?
     #@add_title
-    topic&.category_id&.present?
+    topic&.category_id.present?
   end
 
   def include_excerpt?

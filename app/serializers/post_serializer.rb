@@ -110,7 +110,8 @@ class PostSerializer < BasicPostSerializer
   end
 
   def include_category_id?
-    @add_title
+    #@add_title
+    topic&.category_id&.present?
   end
 
   def include_excerpt?

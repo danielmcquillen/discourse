@@ -224,7 +224,7 @@ describe Report do
         end
 
         it 'returns a report with data' do
-          # expected number of recoords
+          # expected number of records
           expect(report.data.count).to eq 4
 
           # sorts the data from oldest to latest dates
@@ -724,7 +724,7 @@ describe Report do
             post.revise(sam, raw: 'updated body')
           end
 
-          it "doesn't count a revison on your own post" do
+          it "doesn't count a revision on your own post" do
             expect(report.data[0][:revision_count]).to eq(1)
             expect(report.data[0][:username]).to eq('sam')
           end
@@ -1234,6 +1234,33 @@ describe Report do
         expect(tl3_reached[:data][0][:y]).to eql(0)
         expect(tl4_reached[:data][0][:y]).to eql(1)
       end
+    end
+  end
+
+  describe ".cache" do
+    let(:exception_report) { Report.find("exception_test", wrap_exceptions_in_test: true) }
+    let(:valid_report) { Report.find("valid_test", wrap_exceptions_in_test: true) }
+
+    before(:each) do
+      class Report
+        def self.report_exception_test(report)
+          report.data = x
+        end
+
+        def self.report_valid_test(report)
+          report.data = "success!"
+        end
+      end
+    end
+
+    it "caches exception reports for 1 minute" do
+      Discourse.cache.expects(:write).with(Report.cache_key(exception_report), exception_report.as_json, { expires_in: 1.minute })
+      Report.cache(exception_report)
+    end
+
+    it "caches valid reports for 35 minutes" do
+      Discourse.cache.expects(:write).with(Report.cache_key(valid_report), valid_report.as_json, { expires_in: 35.minutes })
+      Report.cache(valid_report)
     end
   end
 

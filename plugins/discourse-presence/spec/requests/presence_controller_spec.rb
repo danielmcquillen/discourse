@@ -45,6 +45,15 @@ describe ::Presence::PresencesController do
         expect(response.status).to eq(404)
       end
 
+      it 'returns the right response when user disables the presence feature and allow_users_to_hide_profile is disabled' do
+        user.user_option.update_column(:hide_profile_and_presence, true)
+        SiteSetting.allow_users_to_hide_profile = false
+
+        post '/presence/publish.json', params: { topic_id: public_topic.id, state: 'replying' }
+
+        expect(response.status).to eq(200)
+      end
+
       it 'returns the right response when the presence site settings is disabled' do
         SiteSetting.presence_enabled = false
 
@@ -397,7 +406,7 @@ describe ::Presence::PresencesController do
         )
       end
 
-      it 'publises the right message when closing composer in public topic' do
+      it 'publishes the right message when closing composer in public topic' do
         messages = MessageBus.track_publish do
           post '/presence/publish.json', params: {
             topic_id: public_topic.id,
@@ -415,7 +424,7 @@ describe ::Presence::PresencesController do
         expect(message.user_ids).to eq(nil)
       end
 
-      it 'publises the right message when closing composer in private topic' do
+      it 'publishes the right message when closing composer in private topic' do
         messages = MessageBus.track_publish do
           post '/presence/publish.json', params: {
             topic_id: private_topic.id,
@@ -433,7 +442,7 @@ describe ::Presence::PresencesController do
         expect(message.user_ids).to eq(nil)
       end
 
-      it 'publises the right message when closing composer in private message' do
+      it 'publishes the right message when closing composer in private message' do
         post = Fabricate(:post, topic: private_message, user: user)
 
         messages = MessageBus.track_publish do

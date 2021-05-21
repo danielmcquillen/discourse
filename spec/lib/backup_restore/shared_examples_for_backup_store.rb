@@ -88,7 +88,7 @@ shared_examples "backup store" do
         report_type = "storage_stats"
         report = Report.find(report_type)
 
-        Report.cache(report, 35.minutes)
+        Report.cache(report)
         expect(Report.find_cached(report_type)).to be_present
 
         store.reset_cache
@@ -266,7 +266,7 @@ shared_examples "remote backup store" do
         expect(url).to match(upload_url_regex("default", filename, multisite: false))
       end
 
-      it "raises an exeption when a file with same filename exists" do
+      it "raises an exception when a file with same filename exists" do
         expect { store.generate_upload_url(backup1.filename) }
           .to raise_exception(BackupRestore::BackupStore::BackupFileExists)
       end

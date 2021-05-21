@@ -234,6 +234,8 @@ class TopicUser < ActiveRecord::Base
         first_visited_at: now ,
         last_visited_at: now
       ))
+
+      DiscourseEvent.trigger(:topic_first_visited_by_user, topic_id, user_id)
     end
 
     def track_visit!(topic_id, user_id)
@@ -301,7 +303,7 @@ class TopicUser < ActiveRecord::Base
         threshold: SiteSetting.default_other_auto_track_topics_after_msecs
       }
 
-      # In case anyone seens "highest_seen_post_number" and gets confused, like I do.
+      # In case anyone sees "highest_seen_post_number" and gets confused, like I do.
       # highest_seen_post_number represents the highest_post_number of the topic when
       # the user visited it. It may be out of alignment with last_read, meaning
       # ... user visited the topic but did not read the posts
@@ -506,9 +508,10 @@ end
 #  last_emailed_post_number :integer
 #  liked                    :boolean          default(FALSE)
 #  bookmarked               :boolean          default(FALSE)
+#  last_posted_at           :datetime
 #
 # Indexes
 #
-#  index_topic_users_on_topic_id_and_user_id  (topic_id,user_id) UNIQUE
-#  index_topic_users_on_user_id_and_topic_id  (user_id,topic_id) UNIQUE
+#  index_forum_thread_users_on_forum_thread_id_and_user_id  (topic_id,user_id) UNIQUE
+#  index_topic_users_on_user_id_and_topic_id                (user_id,topic_id) UNIQUE
 #

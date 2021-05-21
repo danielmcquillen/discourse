@@ -47,7 +47,7 @@ module UserNotificationsHelper
 
     return result unless result.blank?
 
-    # If there is no first paragaph with text, return the first paragraph with
+    # If there is no first paragraph with text, return the first paragraph with
     # something else (an image) or div (a onebox).
     doc.css('body > p:not(:empty), body > div:not(:empty), body > p > div.lightbox-wrapper img').first
   end
@@ -98,11 +98,11 @@ module UserNotificationsHelper
   end
 
   def email_image_url(basename)
-    UrlHelper.absolute("#{Discourse.base_uri}/images/emails/#{basename}")
+    UrlHelper.absolute("#{Discourse.base_path}/images/emails/#{basename}")
   end
 
   def url_for_email(href)
-    URI(href).host.present? ? href : UrlHelper.absolute("#{Discourse.base_uri}#{href}")
+    URI(href).host.present? ? href : UrlHelper.absolute("#{Discourse.base_path}#{href}")
   rescue URI::Error
     href
   end

@@ -71,6 +71,16 @@ describe PostsController do
       expect(json["errors"][0]).to eq(I18n.t("poll.default_poll_must_have_different_options"))
     end
 
+    it "accepts different Chinese options" do
+      SiteSetting.default_locale = 'zh_CN'
+
+      post :create, params: {
+        title: title, raw: "[poll]\n- Microsoft Edge（新）\n- Microsoft Edge（旧）\n[/poll]"
+      }, format: :json
+
+      expect(response).to be_successful
+    end
+
     it "should have at least 1 options" do
       post :create, params: {
         title: title, raw: "[poll]\n[/poll]"
@@ -117,7 +127,7 @@ describe PostsController do
       expect(Poll.find_by(post_id: json["id"]).name).to eq("&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;")
     end
 
-    it "also works whe there is a link starting with '[poll'" do
+    it "also works when there is a link starting with '[poll'" do
       post :create, params: {
         title: title, raw: "[Polls are awesome](/foobar)\n[poll]\n- A\n- B\n[/poll]"
       }, format: :json
@@ -128,7 +138,7 @@ describe PostsController do
       expect(Poll.exists?(post_id: json["id"])).to eq(true)
     end
 
-    it "prevents pollception" do
+    it "prevents poll-inception" do
       post :create, params: {
         title: title, raw: "[poll name=1]\n- A\n[poll name=2]\n- B\n- C\n[/poll]\n- D\n[/poll]"
       }, format: :json
@@ -137,6 +147,17 @@ describe PostsController do
       json = response.parsed_body
       expect(json["cooked"]).to match("data-poll-")
       expect(Poll.where(post_id: json["id"]).count).to eq(1)
+    end
+
+    it "accepts polls with titles" do
+      post :create, params: {
+        title: title, raw: "[poll]\n# What's up?\n- one\n[/poll]"
+      }, format: :json
+
+      expect(response).to be_successful
+      poll = Poll.last
+      expect(poll).to_not be_nil
+      expect(poll.title).to eq("What’s up?")
     end
 
     describe "edit window" do

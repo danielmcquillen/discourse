@@ -54,6 +54,11 @@ RSpec.describe InlineUploads do
         MD
       end
 
+      it "should work with invalid img tags" do
+        md = '<img data-id="<>">'
+        expect(InlineUploads.process(md)).to eq(md)
+      end
+
       it "should not correct code blocks" do
         md = "`<a class=\"attachment\" href=\"#{upload2.url}\">In Code Block</a>`"
 
@@ -654,10 +659,7 @@ RSpec.describe InlineUploads do
 
       before do
         upload3
-        SiteSetting.enable_s3_uploads = true
-        SiteSetting.s3_upload_bucket = "s3-upload-bucket"
-        SiteSetting.s3_access_key_id = "some key"
-        SiteSetting.s3_secret_access_key = "some secret key"
+        setup_s3
         SiteSetting.s3_cdn_url = "https://s3.cdn.com"
       end
 
@@ -679,13 +681,13 @@ RSpec.describe InlineUploads do
 
       it "should correct markdown references" do
         md = <<~MD
-        This is a [some reference] somethign
+        This is a [some reference] something
 
         [some reference]: https:#{upload.url}
         MD
 
         expect(InlineUploads.process(md)).to eq(<<~MD)
-        This is a [some reference] somethign
+        This is a [some reference] something
 
         [some reference]: #{Discourse.base_url}#{upload.short_path}
         MD

@@ -165,7 +165,7 @@ module HasCustomFields
         @preloaded[key]
       else
         # for now you can not mix preload an non preload, it better just to fail
-        raise StandardError, "Attempting to access a non preloaded custom field, this is disallowed to prevent N+1 queries."
+        raise StandardError, "Attempted to access the non preloaded custom field '#{key}'. This is disallowed to prevent N+1 queries."
       end
     end
   end
@@ -257,7 +257,7 @@ module HasCustomFields
     end
   end
 
-  # We support unique indexes on certain fields. In the event two concurrenct processes attempt to
+  # We support unique indexes on certain fields. In the event two concurrent processes attempt to
   # update the same custom field we should catch the error and perform an update instead.
   def create_singular(name, value, field_type = nil)
     write_value = value.is_a?(Hash) || field_type == :json ? value.to_json : value

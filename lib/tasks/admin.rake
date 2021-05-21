@@ -39,7 +39,7 @@ task "admin:create" => :environment do
     email = ask("Email:  ")
     existing_user = User.find_by_email(email)
 
-    # check if user account already exixts
+    # check if user account already exists
     if existing_user
       # user already exists, ask for password reset
       admin = existing_user
@@ -72,6 +72,10 @@ task "admin:create" => :environment do
         say("Passwords don't match, try again...") unless passwords_match
       end while !passwords_match
       admin.password = password
+    end
+
+    if SiteSetting.full_name_required && admin.name.blank?
+      admin.name = ask("Full name:  ")
     end
 
     # save/update user account

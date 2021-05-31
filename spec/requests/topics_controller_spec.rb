@@ -1268,12 +1268,44 @@ RSpec.describe TopicsController do
           topic.reload
           expect(topic.title).to eq('This is a new title for the topic')
 
+          # emits a topic_edited event but not a post_edited web hook event
+          expect(Jobs::EmitWebHookEvent.jobs.length).to eq(1)
+          job_args = Jobs::EmitWebHookEvent.jobs[0]["args"].first
+
+          expect(job_args["event_name"]).to eq("topic_edited")
+          payload = JSON.parse(job_args["payload"])
+          expect(payload["title"]).to eq('This is a new title for the topic')
+        end
+
+        it 'allows a change of then updating the OP' do
+          topic.update(user: user)
+          topic.first_post.update(user: user)
+
+          put "/t/#{topic.slug}/#{topic.id}.json", params: {
+            title: 'This is a new title for the topic'
+          }
+
+          topic.reload
+          expect(topic.title).to eq('This is a new title for the topic')
+
+          update_params = {
+            post: { raw: 'edited body', edit_reason: 'typo' },
+          }
+          put "/posts/#{topic.first_post.id}.json", params: update_params
+
+          # emits a topic_edited event and a post_edited web hook event
           expect(Jobs::EmitWebHookEvent.jobs.length).to eq(2)
           job_args = Jobs::EmitWebHookEvent.jobs[0]["args"].first
 
+          expect(job_args["event_name"]).to eq("topic_edited")
+          payload = JSON.parse(job_args["payload"])
+          expect(payload["title"]).to eq('This is a new title for the topic')
+
+          job_args = Jobs::EmitWebHookEvent.jobs[1]["args"].first
+
           expect(job_args["event_name"]).to eq("post_edited")
           payload = JSON.parse(job_args["payload"])
-          expect(payload["topic_title"]).to eq('This is a new title for the topic')
+          expect(payload["raw"]).to eq("edited body")
         end
 
         it "returns errors with invalid titles" do
@@ -2125,6 +2157,28 @@ RSpec.describe TopicsController do
         get "/t/#{topic.slug}/#{topic.id}/#{post_number}.json"
         expect(response.status).to eq(200)
         expect(extract_post_stream).to eq(@post_ids[-2..-1])
+
+        TopicView.stubs(:chunk_size).returns(3)
+
+        get "/t/#{topic.slug}/#{topic.id}.json", params: { page: 1 }
+        expect(response.status).to eq(200)
+        expect(extract_post_stream).to eq(@post_ids[0..2])
+
+        get "/t/#{topic.slug}/#{topic.id}.json", params: { page: 2 }
+        expect(response.status).to eq(200)
+        expect(extract_post_stream).to eq(@post_ids[3..3])
+
+        get "/t/#{topic.slug}/#{topic.id}.json", params: { page: 3 }
+        expect(response.status).to eq(404)
+
+        TopicView.stubs(:chunk_size).returns(4)
+
+        get "/t/#{topic.slug}/#{topic.id}.json", params: { page: 1 }
+        expect(response.status).to eq(200)
+        expect(extract_post_stream).to eq(@post_ids[0..3])
+
+        get "/t/#{topic.slug}/#{topic.id}.json", params: { page: 2 }
+        expect(response.status).to eq(404)
       end
     end
 
@@ -2769,6 +2823,17 @@ RSpec.describe TopicsController do
         }
       end
 
+      it "raises an error if topic_ids is provided and it is not an array" do
+        put "/topics/bulk.json", params: {
+          topic_ids: "1", operation: operation
+        }
+        expect(response.parsed_body["errors"].first).to match(/Expecting topic_ids to contain a list/)
+        put "/topics/bulk.json", params: {
+          topic_ids: [1], operation: operation
+        }
+        expect(response.parsed_body["errors"]).to eq(nil)
+      end
+
       it "respects the tracked parameter" do
         # untracked topic
         CategoryUser.set_notification_level_for_category(user,
@@ -2943,7 +3008,7 @@ RSpec.describe TopicsController do
       it 'dismisses topics for main category and subcategories' do
         sign_in(user)
 
-        TopicTrackingState.expects(:publish_dismiss_new).with(user.id, topic_ids: [subcategory_topic.id, category_topic.id])
+        TopicTrackingState.expects(:publish_dismiss_new).with(user.id, topic_ids: [category_topic.id, subcategory_topic.id])
 
         put "/topics/reset-new.json?category_id=#{category.id}&include_subcategories=true"
 
@@ -2977,6 +3042,69 @@ RSpec.describe TopicsController do
         TopicTrackingState.expects(:publish_dismiss_new).with(user.id, topic_ids: [tag_and_category_topic.id])
         put "/topics/reset-new.json?tag_id=#{tag.name}&category_id=#{category.id}"
         expect(DismissedTopicUser.where(user_id: user.id).pluck(:topic_id)).to eq([tag_and_category_topic.id])
+      end
+    end
+
+    context "specific topics" do
+      fab!(:topic2) { Fabricate(:topic) }
+      fab!(:topic3) { Fabricate(:topic) }
+
+      it "updates the `new_since` date" do
+        sign_in(user)
+
+        old_date = 2.years.ago
+        user.user_stat.update_column(:new_since, old_date)
+        user.update_column(:created_at, old_date)
+
+        TopicTrackingState.expects(:publish_dismiss_new).with(user.id, topic_ids: [topic2.id, topic3.id]).at_least_once
+
+        put "/topics/reset-new.json", { params: { topic_ids: [topic2.id, topic3.id] } }
+        expect(response.status).to eq(200)
+        user.reload
+        expect(user.user_stat.new_since.to_date).not_to eq(old_date.to_date)
+        expect(DismissedTopicUser.where(user_id: user.id).pluck(:topic_id)).to match_array([topic2.id, topic3.id])
+      end
+
+      it "raises an error if topic_ids is provided and it is not an array" do
+        sign_in(user)
+        put "/topics/reset-new.json", params: { topic_ids: topic2.id }
+        expect(response.parsed_body["errors"].first).to match(/Expecting topic_ids to contain a list/)
+        put "/topics/reset-new.json", params: { topic_ids: [topic2.id] }
+        expect(response.parsed_body["errors"]).to eq(nil)
+      end
+
+      describe "when tracked param is true" do
+        it "does not update user_stat.new_since and does not dismiss untracked topics" do
+          sign_in(user)
+
+          old_date = 2.years.ago
+          user.user_stat.update_column(:new_since, old_date)
+
+          put "/topics/reset-new.json?tracked=true", { params: { topic_ids: [topic2.id, topic3.id] } }
+          expect(response.status).to eq(200)
+          user.reload
+          expect(user.user_stat.new_since.to_date).to eq(old_date.to_date)
+          expect(DismissedTopicUser.where(user_id: user.id).pluck(:topic_id)).to be_empty
+        end
+
+        it "creates topic user records for each unread topic" do
+          sign_in(user)
+          user.user_stat.update_column(:new_since, 2.years.ago)
+
+          tracked_category = Fabricate(:category)
+          CategoryUser.set_notification_level_for_category(user,
+                                                           NotificationLevels.all[:tracking],
+                                                           tracked_category.id)
+          tracked_topic = create_post.topic
+          tracked_topic.update!(category_id: tracked_category.id)
+          topic2.update!(category_id: tracked_category.id)
+
+          create_post # This is a new post, but is not tracked so a record will not be created for it
+          expect do
+            put "/topics/reset-new.json?tracked=true", { params: { topic_ids: [tracked_topic.id, topic2.id, topic3.id] } }
+          end.to change { DismissedTopicUser.where(user_id: user.id).count }.by(2)
+          expect(DismissedTopicUser.where(user_id: user.id).pluck(:topic_id)).to match_array([tracked_topic.id, topic2.id])
+        end
       end
     end
   end
